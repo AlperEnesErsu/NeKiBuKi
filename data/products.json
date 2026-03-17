@@ -1,0 +1,154 @@
+{
+  "products": [
+    {
+      "product_id": "0887dcb3-9da4-4c12-a708-dbc2fecab35c",
+      "name": "Sek Quark Sade 140 G",
+      "url": "https://www.migros.com.tr/hemen/sek-quark-sade-140-g-p-9ed4a5?srsltid=AfmBOopMho9PTMY8-uNUjTQjU1s-bU0fLedLSuNz62yN4XI9entmRTFa",
+      "target_price": 60.0,
+      "check_interval_hours": 2.0,
+      "notify_desktop": true,
+      "notify_email": false,
+      "email_to": "",
+      "last_price": 55.95,
+      "last_stock_in": true,
+      "last_checked_at": "2026-03-17T17:44:53",
+      "last_status_message": "Fiyat: 55.95 TL | Stokta"
+    },
+    {
+      "product_id": "6e9c41aa-5f4e-4e6f-af72-1ebfdbda875f",
+      "name": "İçim 0,5 Yağlı Yüksek Proteinli Uht İçme Sütü 1 L",
+      "url": "https://www.migros.com.tr/icim-05-yagli-yuksek-proteinli-uht-icme-sutu-1-l-p-a800ca",
+      "target_price": 100.0,
+      "check_interval_hours": 2.0,
+      "notify_desktop": true,
+      "notify_email": false,
+      "email_to": "",
+      "last_price": 79.9,
+      "last_stock_in": true,
+      "last_checked_at": "2026-03-17T17:42:43",
+      "last_status_message": "Fiyat: 79.9 TL | Stokta"
+    }
+  ],
+  "history": [
+    {
+      "product_id": "0887dcb3-9da4-4c12-a708-dbc2fecab35c",
+      "checked_at": "2026-03-17T15:46:35",
+      "price": 55.95,
+      "stock_in": true
+    },
+    {
+      "product_id": "6e9c41aa-5f4e-4e6f-af72-1ebfdbda875f",
+      "checked_at": "2026-03-17T15:53:12",
+      "price": 55.95,
+      "stock_in": true
+    },
+    {
+      "product_id": "6e9c41aa-5f4e-4e6f-af72-1ebfdbda875f",
+      "checked_at": "2026-03-17T15:59:41",
+      "price": 55.95,
+      "stock_in": true
+    },
+    {
+      "product_id": "6e9c41aa-5f4e-4e6f-af72-1ebfdbda875f",
+      "checked_at": "2026-03-17T16:05:46",
+      "price": 79.9,
+      "stock_in": true
+    },
+    {
+      "product_id": "0887dcb3-9da4-4c12-a708-dbc2fecab35c",
+      "checked_at": "2026-03-17T16:26:21",
+      "price": 55.95,
+      "stock_in": true
+    },
+    {
+      "product_id": "6e9c41aa-5f4e-4e6f-af72-1ebfdbda875f",
+      "checked_at": "2026-03-17T16:26:21",
+      "price": 79.9,
+      "stock_in": true
+    },
+    {
+      "product_id": "0887dcb3-9da4-4c12-a708-dbc2fecab35c",
+      "checked_at": "2026-03-17T17:40:12",
+      "price": 55.95,
+      "stock_in": true
+    },
+    {
+      "product_id": "0887dcb3-9da4-4c12-a708-dbc2fecab35c",
+      "checked_at": "2026-03-17T17:40:17",
+      "price": 55.95,
+      "stock_in": true
+    },
+    {
+      "product_id": "0887dcb3-9da4-4c12-a708-dbc2fecab35c",
+      "checked_at": "2026-03-17T17:40:25",
+      "price": 55.95,
+      "stock_in": true
+    },
+    {
+      "product_id": "0887dcb3-9da4-4c12-a708-dbc2fecab35c",
+      "checked_at": "2026-03-17T17:40:28",
+      "price": 55.95,
+      "stock_in": true
+    },
+    {
+      "product_id": "0887dcb3-9da4-4c12-a708-dbc2fecab35c",
+      "checked_at": "2026-03-17T17:42:20",
+      "price": 55.95,
+      "stock_in": true
+    },
+    {
+      "product_id": "0887dcb3-9da4-4c12-a708-dbc2fecab35c",
+      "checked_at": "2026-03-17T17:42:23",
+      "price": 55.95,
+      "stock_in": true
+    },
+    {
+      "product_id": "0887dcb3-9da4-4c12-a708-dbc2fecab35c",
+      "checked_at": "2026-03-17T17:42:28",
+      "price": 55.95,
+      "stock_in": true
+    },
+    {
+      "product_id": "0887dcb3-9da4-4c12-a708-dbc2fecab35c",
+      "checked_at": "2026-03-17T17:42:29",
+      "price": 55.95,
+      "stock_in": true
+    },
+    {
+      "product_id": "6e9c41aa-5f4e-4e6f-af72-1ebfdbda875f",
+      "checked_at": "2026-03-17T17:42:36",
+      "price": 79.9,
+      "stock_in": true
+    },
+    {
+      "product_id": "6e9c41aa-5f4e-4e6f-af72-1ebfdbda875f",
+      "checked_at": "2026-03-17T17:42:39",
+      "price": 79.9,
+      "stock_in": true
+    },
+    {
+      "product_id": "0887dcb3-9da4-4c12-a708-dbc2fecab35c",
+      "checked_at": "2026-03-17T17:42:42",
+      "price": 55.95,
+      "stock_in": true
+    },
+    {
+      "product_id": "6e9c41aa-5f4e-4e6f-af72-1ebfdbda875f",
+      "checked_at": "2026-03-17T17:42:43",
+      "price": 79.9,
+      "stock_in": true
+    },
+    {
+      "product_id": "0887dcb3-9da4-4c12-a708-dbc2fecab35c",
+      "checked_at": "2026-03-17T17:42:55",
+      "price": 55.95,
+      "stock_in": true
+    },
+    {
+      "product_id": "0887dcb3-9da4-4c12-a708-dbc2fecab35c",
+      "checked_at": "2026-03-17T17:44:53",
+      "price": 55.95,
+      "stock_in": true
+    }
+  ]
+}
