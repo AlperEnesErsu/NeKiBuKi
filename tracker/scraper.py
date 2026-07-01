@@ -467,8 +467,23 @@ class ProductScraper:
         if not general_mode:
             return tokens
 
+        # Detect the brand candidate dynamically
+        detected_brands = set(b.lower() for b in KNOWN_BRANDS)
+        if tokens:
+            first_word = tokens[0]
+            NON_BRAND_FIRST_WORDS = {
+                "erkek", "kadin", "kadın", "cocuk", "çocuk", "bebek", "ucuz", "en", "buyuk", "büyük",
+                "kucuk", "küçük", "kirmizi", "kırmızı", "mavi", "siyah", "beyaz", "yesil", "yeşil",
+                "sari", "sarı", "kutu", "paket", "adet", "litre", "kilo", "gram", "saat", "telefon",
+                "bilgisayar", "tablet", "ayakkabi", "ayakkabı", "elbise", "pantolon", "gomlek", "gömlek",
+                "canta", "çanta", "defter", "kalem", "orjinal", "orijinal", "kaliteli", "yeni", "eski",
+                "sanal", "market", "hizli", "hızlı", "kargo", "bedava", "indirim", "firsat", "fırsat"
+            }
+            if first_word not in NON_BRAND_FIRST_WORDS:
+                detected_brands.add(first_word)
+
         # In general mode, exclude brand tokens so we can match other brands of the same product
-        no_brand = [t for t in tokens if t not in BRAND_TOKENS]
+        no_brand = [t for t in tokens if t not in BRAND_TOKENS and t not in detected_brands]
         if no_brand:
             return no_brand
 
@@ -478,8 +493,23 @@ class ProductScraper:
         tokens = [w.strip() for w in query.split() if len(w.strip()) > 1]
         lowered = [t.lower() for t in tokens]
 
+        # Detect the brand candidate dynamically
+        detected_brands = set(b.lower() for b in KNOWN_BRANDS)
+        if lowered:
+            first_word = lowered[0]
+            NON_BRAND_FIRST_WORDS = {
+                "erkek", "kadin", "kadın", "cocuk", "çocuk", "bebek", "ucuz", "en", "buyuk", "büyük",
+                "kucuk", "küçük", "kirmizi", "kırmızı", "mavi", "siyah", "beyaz", "yesil", "yeşil",
+                "sari", "sarı", "kutu", "paket", "adet", "litre", "kilo", "gram", "saat", "telefon",
+                "bilgisayar", "tablet", "ayakkabi", "ayakkabı", "elbise", "pantolon", "gomlek", "gömlek",
+                "canta", "çanta", "defter", "kalem", "orjinal", "orijinal", "kaliteli", "yeni", "eski",
+                "sanal", "market", "hizli", "hızlı", "kargo", "bedava", "indirim", "firsat", "fırsat"
+            }
+            if first_word not in NON_BRAND_FIRST_WORDS:
+                detected_brands.add(first_word)
+
         # Just filter out brand tokens so we can compare the same product across different brands
-        no_brand = [tokens[i] for i, t in enumerate(lowered) if t not in BRAND_TOKENS]
+        no_brand = [tokens[i] for i, t in enumerate(lowered) if t not in BRAND_TOKENS and t not in detected_brands]
         if no_brand:
             return " ".join(no_brand)
 
@@ -489,8 +519,24 @@ class ProductScraper:
         if general_mode:
             return False
 
-        query_lower = query.lower()
+        query_lower = query.lower().strip()
+        query_words = [w for w in query_lower.split() if len(w) > 1]
+        if not query_words:
+            return False
+
         query_brands = [b.lower() for b in KNOWN_BRANDS if b.lower() in query_lower]
+
+        first_word = query_words[0]
+        NON_BRAND_FIRST_WORDS = {
+            "erkek", "kadin", "kadın", "cocuk", "çocuk", "bebek", "ucuz", "en", "buyuk", "büyük",
+            "kucuk", "küçük", "kirmizi", "kırmızı", "mavi", "siyah", "beyaz", "yesil", "yeşil",
+            "sari", "sarı", "kutu", "paket", "adet", "litre", "kilo", "gram", "saat", "telefon",
+            "bilgisayar", "tablet", "ayakkabi", "ayakkabı", "elbise", "pantolon", "gomlek", "gömlek",
+            "canta", "çanta", "defter", "kalem", "orjinal", "orijinal", "kaliteli", "yeni", "eski",
+            "sanal", "market", "hizli", "hızlı", "kargo", "bedava", "indirim", "firsat", "fırsat"
+        }
+        if first_word not in NON_BRAND_FIRST_WORDS and first_word not in query_brands:
+            query_brands.append(first_word)
 
         if not query_brands:
             return False

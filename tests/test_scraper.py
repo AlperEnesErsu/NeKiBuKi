@@ -36,3 +36,23 @@ def test_parse_price():
     assert scraper._parse_price("invalid-price") is None
     assert scraper._parse_price("") is None
     assert scraper._parse_price("65 , 95 TL") == 65.95
+
+
+def test_dynamic_brand_matching():
+    scraper = ProductScraper()
+    # Brand-focused mode:
+    # 1. Hardcoded brand
+    assert scraper._is_brand_mismatch("Sek Quark", "sek quark", False) is False
+    assert scraper._is_brand_mismatch("Sek Quark", "icim quark", False) is True
+
+    # 2. Dynamic brand (watches)
+    assert scraper._is_brand_mismatch("Casio F-91W", "casio watch", False) is False
+    assert scraper._is_brand_mismatch("Casio F-91W", "seiko f-91w", False) is True
+
+    # 3. Dynamic brand (phones)
+    assert scraper._is_brand_mismatch("Samsung Galaxy S24", "samsung galaxy s24 ultra", False) is False
+    assert scraper._is_brand_mismatch("Samsung Galaxy S24", "apple iphone 15", False) is True
+
+    # 4. Common words (should not trigger brand mismatch)
+    assert scraper._is_brand_mismatch("Erkek Kol Saati", "casio kol saati", False) is False
+
