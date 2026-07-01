@@ -52,6 +52,7 @@ BRAND_TOKENS = {
     "icim",
     "i\u00e7im",
     "pinar",
+    "p\u0131nar",
     "sutas",
     "s\u00fcta\u015f",
     "danone",
@@ -61,6 +62,19 @@ BRAND_TOKENS = {
     "alt\u0131n",
     "birsah",
     "bir\u015fah",
+    "torku",
+    "yorukoglu",
+    "y\u00f6r\u00fcko\u011flu",
+    "tahsildaroglu",
+    "tahsildaro\u011flu",
+    "bahcivan",
+    "bah\u00e7\u0131van",
+    "ekici",
+    "kaanlar",
+    "kebir",
+    "muratbey",
+    "gundogdu",
+    "g\u00fcndo\u011fdu",
 }
 
 CATEGORY_HINT_TOKENS = {
@@ -78,11 +92,27 @@ CATEGORY_HINT_TOKENS = {
 KNOWN_BRANDS = [
     "Sek",
     "Icim",
+    "İçim",
     "Pinar",
+    "Pınar",
     "Sutas",
+    "Sütaş",
     "Danone",
     "Mis",
     "Dost",
+    "Torku",
+    "Yorukoglu",
+    "Yörükoğlu",
+    "Tahsildaroglu",
+    "Tahsildaroğlu",
+    "Bahcivan",
+    "Bahçıvan",
+    "Ekici",
+    "Kaanlar",
+    "Kebir",
+    "Muratbey",
+    "Gundogdu",
+    "Gündoğdu",
 ]
 
 
@@ -106,6 +136,9 @@ def _is_product_url(url: str) -> bool:
     # A101: /p/ veya /urun/ veya /market/ veya /kapida/urun/
     if "a101.com.tr" in domain:
         return "/p/" in path or "/urun/" in path or "/market/" in path or "/kapida/urun/" in path or ("/kapida/" in path and "arama" not in path)
+    # Hepsiburada: -p- veya -pm- veya /p/ veya /pm/ veya /urun/
+    if "hepsiburada.com" in domain:
+        return "-p-" in path or "-pm-" in path or "/p/" in path or "/urun/" in path
     return False
 
 
@@ -177,13 +210,13 @@ class ProductScraper:
                     if parsed is not None:
                         return parsed
 
-        price_match = PRICE_PATTERN.search(soup.get_text(" ", strip=True))
-        if price_match:
-            return self._parse_price(price_match.group(1))
-
         json_price_match = re.search(r'"price"\s*:\s*"?(\d+(?:[.,]\d+)?)"?', html, re.IGNORECASE)
         if json_price_match:
             return self._parse_price(json_price_match.group(1))
+
+        price_match = PRICE_PATTERN.search(soup.get_text(" ", strip=True))
+        if price_match:
+            return self._parse_price(price_match.group(1))
 
         return None
 
@@ -239,6 +272,7 @@ class ProductScraper:
             ("Cimri", f"https://www.cimri.com/arama?q={quote_plus(effective_query)}"),
             ("A101 Kapida", f"https://www.a101.com.tr/arama/?kelime={quote_plus(effective_query)}"),
             ("Migros", f"https://www.migros.com.tr/arama?q={quote_plus(effective_query)}"),
+            ("Hepsiburada", f"https://www.hepsiburada.com/ara?q={quote_plus(effective_query)}"),
         ]
 
         offers: list[dict] = []
@@ -319,8 +353,9 @@ class ProductScraper:
             "Trendyol": f"https://www.trendyol.com/sr?q={quote_plus(query)}",
             "CarrefourSA": f"https://www.carrefoursa.com/search?q={quote_plus(query)}",
             "Cimri": f"https://www.cimri.com/arama?q={quote_plus(query)}",
-            "A101 Kapida": f"https://www.a101.com.tr/kapida/arama/?query={quote_plus(query)}",
+            "A101 Kapida": f"https://www.a101.com.tr/arama/?kelime={quote_plus(query)}",
             "Migros": f"https://www.migros.com.tr/arama?q={quote_plus(query)}",
+            "Hepsiburada": f"https://www.hepsiburada.com/ara?q={quote_plus(query)}",
         }
 
         label = f"{site} arama sonucuna git"
@@ -372,6 +407,12 @@ class ProductScraper:
                     continue
 
                 title_lower = title.lower()
+
+                # Brand mismatch filter in brand-focused mode
+                if self._is_brand_mismatch(query, title_lower, general_mode):
+                    if debug is not None:
+                        debug["token_filtered"] = int(debug.get("token_filtered", 0)) + 1
+                    continue
 
                 # Token filtresi
                 is_prod = _is_product_url(full_url)
@@ -426,10 +467,7 @@ class ProductScraper:
         if not general_mode:
             return tokens
 
-        category_tokens = [t for t in tokens if t in CATEGORY_HINT_TOKENS]
-        if category_tokens:
-            return category_tokens
-
+        # In general mode, exclude brand tokens so we can match other brands of the same product
         no_brand = [t for t in tokens if t not in BRAND_TOKENS]
         if no_brand:
             return no_brand
@@ -440,15 +478,28 @@ class ProductScraper:
         tokens = [w.strip() for w in query.split() if len(w.strip()) > 1]
         lowered = [t.lower() for t in tokens]
 
-        category_tokens = [tokens[i] for i, t in enumerate(lowered) if t in CATEGORY_HINT_TOKENS]
-        if category_tokens:
-            return " ".join(category_tokens)
-
+        # Just filter out brand tokens so we can compare the same product across different brands
         no_brand = [tokens[i] for i, t in enumerate(lowered) if t not in BRAND_TOKENS]
         if no_brand:
             return " ".join(no_brand)
 
         return query
+
+    def _is_brand_mismatch(self, query: str, title_lower: str, general_mode: bool) -> bool:
+        if general_mode:
+            return False
+
+        query_lower = query.lower()
+        query_brands = [b.lower() for b in KNOWN_BRANDS if b.lower() in query_lower]
+
+        if not query_brands:
+            return False
+
+        has_matching_brand = any(qb in title_lower for qb in query_brands)
+        if not has_matching_brand:
+            return True
+
+        return False
 
     def _build_general_brand_link_offers(self, query: str) -> list[dict]:
         offers: list[dict] = []

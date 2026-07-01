@@ -70,6 +70,13 @@ Aşağıdaki adımları sırayla tamamlayacağız:
 - [x] **Adım 5: Unit Test Altyapısının Kurulması (QA Agent)**
   - `pytest` entegrasyonu ile model, scraper, storage ve service mekanizmalarını test eden 7 test senaryosu yazıldı ve başarıyla doğrulandı.
 
-- [ ] **Adım 6: UI Tasarımı ve Hata Giderme Cilası (UI Agent)**
-  - Tkinter grid ve padding düzenlemeleriyle daha modern bir görünüm elde etmek.
-  - Grafik çizimindeki tarih formatlarını ve Türkçe karakter desteğini kontrol etmek.
+- [x] **Adım 6: UI Tasarımı ve Hata Giderme Cilası (UI Agent)**
+  - Tkinter grid ve padding düzenlemeleriyle daha modern bir görünüm elde edildi.
+  - Grafik çizimindeki tarih formatları, Türkçe karakter desteği ve Sleek Dark Mode görsel uyumluluğu tamamlandı.
+
+- [x] **Adım 7: Hepsiburada Entegrasyonu ve Benzer Ürün Eşleştirme Geliştirmeleri (Scraper Agent)**
+  - Hepsiburada araması (`/ara?q=...`) ve ürün sayfası fiyat/stok kazıma altyapısı entegre edildi.
+  - Genel fiyat ayrıştırma mantığı optimize edilerek script içindeki kesin JSON fiyat etiketleri serbest metin regexine göre önceliklendirildi.
+  - Benzer ürün bulma motoru genişletildi: Marka odaklı aramalarda marka doğrulaması zorunlu hale getirilerek ilgisiz ürünlerin elenmesi sağlandı.
+  - Genel karşılaştırma modunda sorgu normalizasyonu iyileştirildi; "Süzme Peynir" gibi ürün detayları korunarak sadece marka adı filtrelendi.
+

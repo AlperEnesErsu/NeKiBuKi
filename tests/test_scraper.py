@@ -21,6 +21,11 @@ def test_is_product_url():
     assert _is_product_url("https://www.a101.com.tr/market/sek-quark-sade-140g/") is True
     assert _is_product_url("https://www.a101.com.tr/arama/?kelime=Quark") is False
 
+    # Hepsiburada
+    assert _is_product_url("https://www.hepsiburada.com/sek-quark-protein-sade-165-g-x4-adet-pm-HBC0000CHSG2K") is True
+    assert _is_product_url("https://www.hepsiburada.com/ara?q=Quark") is False
+
+
 
 def test_parse_price():
     scraper = ProductScraper()
