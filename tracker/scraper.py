@@ -37,7 +37,15 @@ IN_STOCK_MARKERS = [
     "teslimat",
 ]
 
-PRICE_PATTERN = re.compile(r"(\d{1,4}(?:[.,]\d{1,2})?)\s*(?:tl|₺)", re.IGNORECASE)
+# Match patterns with optional spaces around dot/comma (e.g. 65 , 95 TL)
+PRICE_PATTERN = re.compile(r"(\d{1,4}(?:\s*[.,]\s*\d{1,2})?)\s*(?:tl|₺)", re.IGNORECASE)
+
+def _http_get(url: str, timeout: int = 20) -> requests.Response:
+    try:
+        from curl_cffi import requests as curl_requests
+        return curl_requests.get(url, impersonate="chrome120", timeout=timeout)
+    except ImportError:
+        return requests.get(url, headers=DEFAULT_HEADERS, timeout=timeout)
 
 BRAND_TOKENS = {
     "sek",
@@ -86,18 +94,18 @@ def _is_product_url(url: str) -> bool:
     # Trendyol ürün URL'leri: /marka/urun-adi-p-XXXXXX
     if "trendyol.com" in domain:
         return bool(re.search(r"-p-\d+", path))
-    # CarrefourSA: /p- veya /product
+    # CarrefourSA: /p- veya /product veya -p-
     if "carrefoursa.com" in domain:
-        return "/p-" in path or "/product" in path
-    # Akakce: /urun/
+        return "/p-" in path or "/product" in path or "-p-" in path
+    # Akakce: /urun/ veya /fiyati,
     if "akakce.com" in domain:
-        return "/urun/" in path or re.search(r"/[a-z0-9-]+-\d+", path) is not None
+        return "/urun/" in path or "/fiyati," in path or re.search(r"/[a-z0-9-]+-\d+", path) is not None
     # Migros: genelde /urun/ ile gider
     if "migros.com.tr" in domain:
         return "/urun/" in path
-    # A101 Kapida: /kapida/urun/ veya ürün slug kalıpları
+    # A101: /p/ veya /urun/ veya /market/ veya /kapida/urun/
     if "a101.com.tr" in domain:
-        return "/kapida/urun/" in path or "/kapida/" in path and "arama" not in path
+        return "/p/" in path or "/urun/" in path or "/market/" in path or "/kapida/urun/" in path or ("/kapida/" in path and "arama" not in path)
     return False
 
 
@@ -107,9 +115,9 @@ class ProductScraper:
 
     def scrape(self, url: str) -> ScrapeResult:
         try:
-            response = requests.get(url, headers=DEFAULT_HEADERS, timeout=20)
+            response = _http_get(url, timeout=20)
             response.raise_for_status()
-        except requests.RequestException as exc:
+        except Exception as exc:
             return ScrapeResult(price=None, stock_in=None, status_message=f"HTTP hatasi: {exc}")
 
         soup = BeautifulSoup(response.text, "html.parser")
@@ -193,10 +201,14 @@ class ProductScraper:
             .replace("tl", "")
             .replace("₺", "")
             .replace(" ", "")
+            .replace("\n", "")
+            .replace("\r", "")
             .strip()
         )
         if not cleaned:
             return None
+
+        cleaned = cleaned.replace(" ", "")
 
         if "," in cleaned and "." in cleaned:
             if cleaned.find(".") < cleaned.find(","):
@@ -225,7 +237,7 @@ class ProductScraper:
             ("Trendyol", f"https://www.trendyol.com/sr?q={quote_plus(effective_query)}"),
             ("CarrefourSA", f"https://www.carrefoursa.com/search?q={quote_plus(effective_query)}"),
             ("Cimri", f"https://www.cimri.com/arama?q={quote_plus(effective_query)}"),
-            ("A101 Kapida", f"https://www.a101.com.tr/kapida/arama/?query={quote_plus(effective_query)}"),
+            ("A101 Kapida", f"https://www.a101.com.tr/arama/?kelime={quote_plus(effective_query)}"),
             ("Migros", f"https://www.migros.com.tr/arama?q={quote_plus(effective_query)}"),
         ]
 
@@ -339,10 +351,19 @@ class ProductScraper:
         ratio = 0.4 if general_mode else 0.6
         min_match = max(1, math.ceil(len(query_tokens) * ratio)) if query_tokens else 1
 
-        for container in soup.select("a[href]")[:200]:
+        for container in soup.select("a[href]"):
             try:
-                if debug is not None:
-                    debug["links_scanned"] = int(debug.get("links_scanned", 0)) + 1
+                href = container.get("href", "").strip()
+                if not href or href.startswith("#") or "javascript:" in href.lower() or href.endswith(".jpg"):
+                    continue
+
+                full_url = urljoin(search_url, href) if not href.startswith("http") else href
+
+                if not full_url.startswith("http"):
+                    continue
+
+                if full_url.rstrip("/") == search_url.rstrip("/"):
+                    continue
 
                 title = container.get_text(" ", strip=True)
                 if not title or len(title) < 5 or len(title) > 300:
@@ -352,7 +373,8 @@ class ProductScraper:
 
                 title_lower = title.lower()
 
-                # Token filtresi — yeterli eşleşme yoksa atla
+                # Token filtresi
+                is_prod = _is_product_url(full_url)
                 if query_tokens:
                     match_count = sum(1 for token in query_tokens if token in title_lower)
                     if match_count < min_match:
@@ -360,9 +382,15 @@ class ProductScraper:
                             debug["token_filtered"] = int(debug.get("token_filtered", 0)) + 1
                         continue
 
+                if debug is not None:
+                    debug["links_scanned"] = int(debug.get("links_scanned", 0)) + 1
+
                 parent_text = ""
                 if container.parent and container.parent.name != "body":
-                    parent_text = container.parent.get_text(" ", strip=True)[:200]
+                    # Use raw text without separator to avoid spaces in prices (e.g. 65,95 -> 65 , 95)
+                    parent_text = container.parent.get_text()[:400]
+                    if container.parent.parent and container.parent.parent.name != "body":
+                        parent_text += " " + container.parent.parent.get_text()[:400]
 
                 combined_text = f"{title} {parent_text}"
                 price = self._extract_price_from_free_text(combined_text)
@@ -372,29 +400,9 @@ class ProductScraper:
                         debug["price_filtered"] = int(debug.get("price_filtered", 0)) + 1
                     continue
 
-                href = container.get("href", "").strip()
-                if not href or href.startswith("#") or "javascript:" in href.lower() or href.endswith(".jpg"):
-                    if debug is not None:
-                        debug["url_filtered"] = int(debug.get("url_filtered", 0)) + 1
-                    continue
-
-                # URL'yi tam hale getir — query string'i KORU (ürün sayfaları için)
-                full_url = urljoin(search_url, href) if not href.startswith("http") else href
-
                 # Sadece arama sayfalarında query'yi kes; ürün sayfalarında koru
-                if not _is_product_url(full_url) and "?" in full_url:
+                if not is_prod and "?" in full_url:
                     full_url = full_url.split("?")[0]
-
-                if not full_url.startswith("http"):
-                    if debug is not None:
-                        debug["url_filtered"] = int(debug.get("url_filtered", 0)) + 1
-                    continue
-
-                # Arama URL'siyle aynıysa atla (kendi sayfasına link verme)
-                if full_url.rstrip("/") == search_url.rstrip("/"):
-                    if debug is not None:
-                        debug["url_filtered"] = int(debug.get("url_filtered", 0)) + 1
-                    continue
 
                 offers.append({
                     "site": site,
@@ -460,13 +468,13 @@ class ProductScraper:
 
     def _fetch_soup(self, url: str) -> tuple[Optional[BeautifulSoup], Optional[int], str]:
         try:
-            response = requests.get(url, headers=DEFAULT_HEADERS, timeout=20)
+            response = _http_get(url, timeout=20)
             response.raise_for_status()
             return BeautifulSoup(response.text, "html.parser"), response.status_code, ""
-        except requests.RequestException as exc:
+        except Exception as exc:
             status_code = None
-            if getattr(exc, "response", None) is not None:
-                status_code = exc.response.status_code
+            if hasattr(exc, "response") and getattr(exc, "response") is not None:
+                status_code = getattr(exc, "response").status_code
             return None, status_code, str(exc)
 
     def get_last_search_debug_report(self) -> str:

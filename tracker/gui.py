@@ -27,11 +27,31 @@ class App(tk.Tk):
     def __init__(self, data_file: Path) -> None:
         super().__init__()
         self.title("NeKiBuKi - Fiyat Takibi")
-        self.geometry("1400x750")
-        self.configure(bg="#f5f7fa")
+        self.geometry("1400x820")
+        self.configure(bg="#0f172a")
 
         self.storage = JsonStorage(data_file)
         self.service = TrackerService(self.storage, ProductScraper(), Notifier())
+
+        # Load SMTP settings from config.json
+        config_path = data_file.parent / "config.json"
+        if config_path.exists():
+            try:
+                import json
+                import os
+                config = json.loads(config_path.read_text(encoding="utf-8"))
+                if config.get("smtp_host"):
+                    os.environ["NEKIBUKI_SMTP_HOST"] = config["smtp_host"]
+                if config.get("smtp_port"):
+                    os.environ["NEKIBUKI_SMTP_PORT"] = str(config["smtp_port"])
+                if config.get("smtp_user"):
+                    os.environ["NEKIBUKI_SMTP_USER"] = config["smtp_user"]
+                if config.get("smtp_pass"):
+                    os.environ["NEKIBUKI_SMTP_PASS"] = config["smtp_pass"]
+                if config.get("smtp_from"):
+                    os.environ["NEKIBUKI_SMTP_FROM"] = config["smtp_from"]
+            except Exception:
+                pass
 
         self.scheduler = schedule.Scheduler()
         self.scheduler_stop = threading.Event()
@@ -51,14 +71,40 @@ class App(tk.Tk):
     def _configure_style(self) -> None:
         style = ttk.Style(self)
         style.theme_use("clam")
-        style.configure("App.TFrame", background="#f2f5f9")
-        style.configure("Card.TLabelframe", background="#ffffff", borderwidth=1)
-        style.configure("Card.TLabelframe.Label", background="#ffffff", foreground="#16324f", font=("Segoe UI Semibold", 10))
-        style.configure("Title.TLabel", background="#f2f5f9", foreground="#0f2740", font=("Segoe UI Semibold", 17))
-        style.configure("Hint.TLabel", background="#f2f5f9", foreground="#4c6176", font=("Segoe UI", 10))
-        style.configure("Primary.TButton", font=("Segoe UI Semibold", 10), padding=(12, 7))
-        style.configure("Treeview", rowheight=28, font=("Segoe UI", 10))
-        style.configure("Treeview.Heading", font=("Segoe UI Semibold", 10))
+        
+        # Slate Dark Color Palette Configuration
+        style.configure("App.TFrame", background="#0f172a")
+        style.configure("Card.TFrame", background="#1e293b")
+        style.configure("Card.TLabelframe", background="#1e293b", borderwidth=1, bordercolor="#334155")
+        style.configure("Card.TLabelframe.Label", background="#1e293b", foreground="#f8fafc", font=("Segoe UI Semibold", 10))
+        style.configure("Title.TLabel", background="#0f172a", foreground="#f8fafc", font=("Segoe UI Semibold", 17))
+        style.configure("Hint.TLabel", background="#0f172a", foreground="#94a3b8", font=("Segoe UI", 10))
+        
+        # Label Styles
+        style.configure("TLabel", background="#0f172a", foreground="#f8fafc", font=("Segoe UI", 10))
+        style.configure("Form.TLabel", background="#1e293b", foreground="#f8fafc", font=("Segoe UI", 10))
+        
+        # Input/Entry Styles
+        style.configure("TEntry", fieldbackground="#0f172a", foreground="#ffffff", insertcolor="#ffffff", bordercolor="#334155", lightcolor="#334155", darkcolor="#334155")
+        style.map("TEntry", bordercolor=[("focus", "#6366f1")])
+        
+        # Checkbutton Styles
+        style.configure("TCheckbutton", background="#1e293b", foreground="#f8fafc", font=("Segoe UI", 10))
+        style.map("TCheckbutton", background=[("active", "#1e293b")], foreground=[("active", "#f8fafc")])
+        
+        # Button Styles
+        style.configure("TButton", background="#334155", foreground="#f8fafc", font=("Segoe UI Semibold", 10), padding=(10, 5), borderwidth=0)
+        style.map("TButton", background=[("active", "#475569"), ("pressed", "#1e293b")])
+        
+        style.configure("Primary.TButton", background="#6366f1", foreground="#ffffff", font=("Segoe UI Semibold", 10), padding=(10, 5), borderwidth=0)
+        style.map("Primary.TButton", background=[("active", "#4f46e5"), ("pressed", "#3730a3")])
+        
+        # Treeview (Table) Styles
+        style.configure("Treeview", background="#1e293b", fieldbackground="#1e293b", foreground="#f8fafc", rowheight=30, font=("Segoe UI", 10), borderwidth=0)
+        style.map("Treeview", background=[("selected", "#4f46e5")], foreground=[("selected", "#ffffff")])
+        
+        style.configure("Treeview.Heading", background="#334155", foreground="#f8fafc", font=("Segoe UI Semibold", 10), borderwidth=1)
+        style.map("Treeview.Heading", background=[("active", "#475569")])
 
     def _build_ui(self) -> None:
         root = ttk.Frame(self, padding=12, style="App.TFrame")
@@ -90,33 +136,44 @@ class App(tk.Tk):
         self.target_var = tk.StringVar(value="100")
         self.interval_var = tk.StringVar(value="2")
         self.desktop_var = tk.BooleanVar(value=True)
+        self.email_notify_var = tk.BooleanVar(value=False)
+        self.email_to_var = tk.StringVar()
 
-        ttk.Label(form, text="Urun Adi").grid(row=0, column=0, sticky=W, padx=5, pady=5)
+        ttk.Label(form, text="Urun Adi", style="Form.TLabel").grid(row=0, column=0, sticky=W, padx=5, pady=5)
         ttk.Entry(form, textvariable=self.name_var, width=25).grid(row=0, column=1, sticky="ew", padx=5, pady=5)
 
-        ttk.Label(form, text="URL").grid(row=1, column=0, sticky=W, padx=5, pady=5)
+        ttk.Label(form, text="URL", style="Form.TLabel").grid(row=1, column=0, sticky=W, padx=5, pady=5)
         entry_url = ttk.Entry(form, textvariable=self.url_var)
         entry_url.grid(row=1, column=1, sticky="ew", padx=5, pady=5)
         form.columnconfigure(1, weight=1)
 
-        ttk.Label(form, text="Hedef Fiyat").grid(row=2, column=0, sticky=W, padx=5, pady=5)
+        ttk.Label(form, text="Hedef Fiyat", style="Form.TLabel").grid(row=2, column=0, sticky=W, padx=5, pady=5)
         ttk.Entry(form, textvariable=self.target_var, width=12).grid(row=2, column=1, sticky=W, padx=5, pady=5)
 
-        ttk.Label(form, text="Kontrol (saat)").grid(row=2, column=2, sticky=W, padx=5, pady=5)
+        ttk.Label(form, text="Kontrol (saat)", style="Form.TLabel").grid(row=2, column=2, sticky=W, padx=5, pady=5)
         ttk.Entry(form, textvariable=self.interval_var, width=8).grid(row=2, column=3, sticky=W, padx=5, pady=5)
 
         ttk.Checkbutton(form, text="Masaustu Uyarisi", variable=self.desktop_var).grid(
             row=3, column=0, columnspan=2, sticky=W, padx=5, pady=5
         )
+        ttk.Checkbutton(form, text="E-posta Uyarisi", variable=self.email_notify_var).grid(
+            row=3, column=2, columnspan=2, sticky=W, padx=5, pady=5
+        )
 
-        button_row = ttk.Frame(form)
-        button_row.grid(row=4, column=0, columnspan=4, sticky="ew", padx=5, pady=(8, 4))
+        ttk.Label(form, text="Alici E-posta", style="Form.TLabel").grid(row=4, column=0, sticky=W, padx=5, pady=5)
+        ttk.Entry(form, textvariable=self.email_to_var, width=35).grid(
+            row=4, column=1, columnspan=3, sticky="ew", padx=5, pady=5
+        )
+
+        button_row = ttk.Frame(form, style="Card.TFrame")
+        button_row.grid(row=5, column=0, columnspan=4, sticky="ew", padx=5, pady=(8, 4))
         button_row.columnconfigure(3, weight=1)
 
         ttk.Button(button_row, text="Kaydet", command=self._save_product, style="Primary.TButton").pack(side=LEFT, padx=2)
         ttk.Button(button_row, text="Sil", command=self._delete_selected).pack(side=LEFT, padx=2)
         ttk.Button(button_row, text="Kontrol Et", command=self._check_selected).pack(side=LEFT, padx=2)
         ttk.Button(button_row, text="Hepsini Kontrol Et", command=self._check_all).pack(side=LEFT, padx=2)
+        ttk.Button(button_row, text="SMTP Ayarlari", command=self._open_smtp_settings).pack(side=LEFT, padx=2)
 
         self.check_alert_var = tk.StringVar(value="Kontrol sonucu burada gorunur.")
         self.check_alert_label = tk.Label(
@@ -124,11 +181,11 @@ class App(tk.Tk):
             textvariable=self.check_alert_var,
             anchor="w",
             justify="left",
-            fg="#1f3349",
-            bg="#ffffff",
+            fg="#94a3b8",
+            bg="#1e293b",
             font=("Segoe UI", 9, "bold"),
         )
-        self.check_alert_label.grid(row=5, column=0, columnspan=4, sticky="ew", padx=5, pady=(6, 2))
+        self.check_alert_label.grid(row=6, column=0, columnspan=4, sticky="ew", padx=5, pady=(6, 2))
 
     def _build_table(self, parent: ttk.Frame) -> None:
         frame = ttk.LabelFrame(parent, text="Takip Listesi", padding=8, style="Card.TLabelframe")
@@ -159,17 +216,22 @@ class App(tk.Tk):
         frame = ttk.LabelFrame(parent, text="Aktivite Logu", padding=8, style="Card.TLabelframe")
         frame.pack(fill=X, pady=(0, 0))
 
-        self.log = tk.Text(frame, height=4, wrap="word", bd=0, padx=6, pady=6, bg="#f8fafc", fg="#1f3349")
+        self.log = tk.Text(frame, height=4, wrap="word", bd=0, padx=6, pady=6, bg="#0f172a", fg="#f8fafc", insertbackground="#ffffff")
         self.log.pack(fill=X)
 
         chart_frame = ttk.LabelFrame(parent, text="Fiyat Grafigi", padding=8, style="Card.TLabelframe")
         chart_frame.pack(fill=BOTH, expand=False, pady=(8, 0))
 
         self.figure = Figure(figsize=(4, 2.5), dpi=80)
+        self.figure.patch.set_facecolor('#1e293b')
         self.ax = self.figure.add_subplot(111)
-        self.ax.set_title("Trend", fontsize=9)
-        self.ax.set_xlabel("Tarih", fontsize=8)
-        self.ax.set_ylabel("Fiyat (TL)", fontsize=8)
+        self.ax.set_facecolor('#0f172a')
+        self.ax.set_title("Trend", fontsize=9, color='#f8fafc')
+        self.ax.set_xlabel("Tarih", fontsize=8, color='#94a3b8')
+        self.ax.set_ylabel("Fiyat (TL)", fontsize=8, color='#94a3b8')
+        self.ax.tick_params(axis='both', colors='#94a3b8')
+        for spine in self.ax.spines.values():
+            spine.set_color('#334155')
 
         self.canvas = FigureCanvasTkAgg(self.figure, master=chart_frame)
         self.canvas.get_tk_widget().pack(fill=BOTH, expand=True)
@@ -178,18 +240,18 @@ class App(tk.Tk):
         wrapper = ttk.LabelFrame(parent, text="Benzer Urunleri Tara", padding=10, style="Card.TLabelframe")
         wrapper.pack(fill=BOTH, expand=True)
 
-        top = ttk.Frame(wrapper)
+        top = ttk.Frame(wrapper, style="Card.TFrame")
         top.pack(fill=X, pady=(0, 10))
 
         self.compare_query_var = tk.StringVar()
         self.compare_general_var = tk.BooleanVar(value=True)
-        ttk.Label(top, text="Ara:").pack(side=LEFT, padx=5)
+        ttk.Label(top, text="Ara:", style="Form.TLabel").pack(side=LEFT, padx=5)
         ttk.Entry(top, textvariable=self.compare_query_var, width=50).pack(side=LEFT, padx=5, fill=X, expand=True)
         ttk.Checkbutton(top, text="Genel Arama", variable=self.compare_general_var).pack(side=LEFT, padx=5)
         ttk.Button(top, text="Ara", command=self._start_market_search, style="Primary.TButton").pack(side=LEFT, padx=5)
 
         self.compare_best_var = tk.StringVar(value="Henuz sonuc yok")
-        best_label = ttk.Label(wrapper, textvariable=self.compare_best_var, foreground="#0b5d3f", font=("Segoe UI", 9, "bold"))
+        best_label = tk.Label(wrapper, textvariable=self.compare_best_var, bg="#1e293b", fg="#34d399", font=("Segoe UI", 9, "bold"), anchor=W)
         best_label.pack(anchor=W, pady=(0, 8))
 
         columns = ("site", "price", "title")
@@ -263,8 +325,8 @@ class App(tk.Tk):
             target_price=target_price,
             check_interval_hours=check_interval,
             notify_desktop=self.desktop_var.get(),
-            notify_email=False,
-            email_to="",
+            notify_email=self.email_notify_var.get(),
+            email_to=self.email_to_var.get().strip(),
             last_price=existing.last_price if existing else None,
             last_stock_in=existing.last_stock_in if existing else None,
             last_checked_at=existing.last_checked_at if existing else "",
@@ -363,11 +425,11 @@ class App(tk.Tk):
         self.check_alert_var.set(message)
 
         if result.stock_in is True and below_target:
-            self.check_alert_label.configure(fg="#0b5d3f")
+            self.check_alert_label.configure(fg="#34d399")
         elif result.stock_in is True:
-            self.check_alert_label.configure(fg="#7a5a00")
+            self.check_alert_label.configure(fg="#fbbf24")
         else:
-            self.check_alert_label.configure(fg="#8b1e2d")
+            self.check_alert_label.configure(fg="#f87171")
 
     def _check_all(self) -> None:
         all_results = self.service.check_all_products()
@@ -392,14 +454,27 @@ class App(tk.Tk):
         self.target_var.set(str(product.target_price))
         self.interval_var.set(str(product.check_interval_hours))
         self.desktop_var.set(product.notify_desktop)
+        self.email_notify_var.set(product.notify_email)
+        self.email_to_var.set(product.email_to)
         self.compare_query_var.set(product.name)
         self._draw_history(product_id)
 
     def _draw_history(self, product_id: str | None) -> None:
         self.ax.clear()
-        self.ax.set_title("Fiyat Trendi", fontsize=10)
-        self.ax.set_xlabel("Tarih", fontsize=9)
-        self.ax.set_ylabel("Fiyat (TL)", fontsize=9)
+        
+        # Configure colors for dark mode
+        self.figure.patch.set_facecolor('#1e293b')
+        self.ax.set_facecolor('#0f172a')
+        
+        self.ax.set_title("Fiyat Trendi", fontsize=10, color='#f8fafc')
+        self.ax.set_xlabel("Tarih", fontsize=9, color='#94a3b8')
+        self.ax.set_ylabel("Fiyat (TL)", fontsize=9, color='#94a3b8')
+        
+        self.ax.spines['bottom'].set_color('#334155')
+        self.ax.spines['left'].set_color('#334155')
+        self.ax.spines['top'].set_color('#334155')
+        self.ax.spines['right'].set_color('#334155')
+        
         self.figure.tight_layout()
 
         if not product_id:
@@ -410,16 +485,16 @@ class App(tk.Tk):
         points = [p for p in history if p.price is not None]
 
         if not points:
-            self.ax.text(0.5, 0.5, "Henuz veri yok", ha="center", va="center", transform=self.ax.transAxes, fontsize=10)
+            self.ax.text(0.5, 0.5, "Henuz veri yok", ha="center", va="center", transform=self.ax.transAxes, fontsize=10, color='#94a3b8')
             self.canvas.draw_idle()
             return
 
         dates = [mdates.datestr2num(p.checked_at.replace("T", " ")) for p in points]
         prices = [p.price for p in points]
 
-        self.ax.plot_date(dates, prices, "-", linewidth=2, markersize=4)
+        self.ax.plot_date(dates, prices, "-", linewidth=2, color='#6366f1', markerfacecolor='#f59e0b', markeredgecolor='#f59e0b', markersize=4)
         self.ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m %H:%M"))
-        self.ax.tick_params(axis='both', labelsize=8)
+        self.ax.tick_params(axis='both', labelsize=8, colors='#94a3b8')
         self.figure.autofmt_xdate(rotation=30)
         self.canvas.draw_idle()
 
@@ -472,6 +547,8 @@ class App(tk.Tk):
         self.target_var.set("100")
         self.interval_var.set("2")
         self.desktop_var.set(True)
+        self.email_notify_var.set(False)
+        self.email_to_var.set("")
 
     def _log(self, text: str) -> None:
         self.log.insert(END, f"{time.strftime('%H:%M:%S')} - {text}\n")
@@ -568,3 +645,122 @@ class App(tk.Tk):
     def _on_close(self) -> None:
         self.scheduler_stop.set()
         self.destroy()
+
+    def _open_smtp_settings(self) -> None:
+        import os
+        import json
+        
+        dialog = tk.Toplevel(self)
+        dialog.title("SMTP (E-posta) Ayarlari")
+        dialog.geometry("450x330")
+        dialog.configure(bg="#0f172a")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        
+        config_path = self.storage.file_path.parent / "config.json"
+        config = {}
+        if config_path.exists():
+            try:
+                config = json.loads(config_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        
+        host_var = tk.StringVar(value=config.get("smtp_host", os.getenv("NEKIBUKI_SMTP_HOST", "")))
+        port_var = tk.StringVar(value=config.get("smtp_port", os.getenv("NEKIBUKI_SMTP_PORT", "587")))
+        user_var = tk.StringVar(value=config.get("smtp_user", os.getenv("NEKIBUKI_SMTP_USER", "")))
+        pass_var = tk.StringVar(value=config.get("smtp_pass", os.getenv("NEKIBUKI_SMTP_PASS", "")))
+        from_var = tk.StringVar(value=config.get("smtp_from", os.getenv("NEKIBUKI_SMTP_FROM", "")))
+        
+        frame = ttk.Frame(dialog, padding=15, style="App.TFrame")
+        frame.pack(fill=BOTH, expand=True)
+        
+        ttk.Label(frame, text="SMTP Sunucu (Host):").grid(row=0, column=0, sticky=W, padx=5, pady=5)
+        ttk.Entry(frame, textvariable=host_var, width=25).grid(row=0, column=1, sticky=W, padx=5, pady=5)
+        
+        ttk.Label(frame, text="SMTP Port:").grid(row=1, column=0, sticky=W, padx=5, pady=5)
+        ttk.Entry(frame, textvariable=port_var, width=10).grid(row=1, column=1, sticky=W, padx=5, pady=5)
+        
+        ttk.Label(frame, text="SMTP Kullanici (E-posta):").grid(row=2, column=0, sticky=W, padx=5, pady=5)
+        ttk.Entry(frame, textvariable=user_var, width=25).grid(row=2, column=1, sticky=W, padx=5, pady=5)
+        
+        ttk.Label(frame, text="SMTP Sifre / Uygulama Sifresi:").grid(row=3, column=0, sticky=W, padx=5, pady=5)
+        ttk.Entry(frame, textvariable=pass_var, show="*", width=25).grid(row=3, column=1, sticky=W, padx=5, pady=5)
+        
+        ttk.Label(frame, text="Gonderen E-posta (Opsiyonel):").grid(row=4, column=0, sticky=W, padx=5, pady=5)
+        ttk.Entry(frame, textvariable=from_var, width=25).grid(row=4, column=1, sticky=W, padx=5, pady=5)
+        
+        btn_frame = ttk.Frame(frame, style="App.TFrame")
+        btn_frame.grid(row=5, column=0, columnspan=2, pady=15, sticky="ew")
+        
+        def save_smtp():
+            h = host_var.get().strip()
+            p = port_var.get().strip()
+            u = user_var.get().strip()
+            pwd = pass_var.get().strip()
+            f = from_var.get().strip()
+            
+            if not h or not u or not pwd:
+                messagebox.showerror("Hata", "Sunucu, kullanici ve sifre alanlari zorunludur.")
+                return
+                
+            config_data = {
+                "smtp_host": h,
+                "smtp_port": p,
+                "smtp_user": u,
+                "smtp_pass": pwd,
+                "smtp_from": f
+            }
+            
+            try:
+                config_path.write_text(json.dumps(config_data, indent=2, ensure_ascii=False), encoding="utf-8")
+                
+                os.environ["NEKIBUKI_SMTP_HOST"] = h
+                os.environ["NEKIBUKI_SMTP_PORT"] = p
+                os.environ["NEKIBUKI_SMTP_USER"] = u
+                os.environ["NEKIBUKI_SMTP_PASS"] = pwd
+                if f:
+                    os.environ["NEKIBUKI_SMTP_FROM"] = f
+                else:
+                    os.environ.pop("NEKIBUKI_SMTP_FROM", None)
+                    
+                messagebox.showinfo("Basarili", "SMTP ayarları kaydedildi.")
+                dialog.destroy()
+            except Exception as e:
+                messagebox.showerror("Hata", f"Ayarlar kaydedilemedi: {e}")
+                
+        def test_smtp():
+            h = host_var.get().strip()
+            p = port_var.get().strip()
+            u = user_var.get().strip()
+            pwd = pass_var.get().strip()
+            f = from_var.get().strip()
+            
+            if not h or not u or not pwd:
+                messagebox.showerror("Hata", "Test icin sunucu, kullanici ve sifre gereklidir.")
+                return
+                
+            os.environ["NEKIBUKI_SMTP_HOST"] = h
+            os.environ["NEKIBUKI_SMTP_PORT"] = p
+            os.environ["NEKIBUKI_SMTP_USER"] = u
+            os.environ["NEKIBUKI_SMTP_PASS"] = pwd
+            if f:
+                os.environ["NEKIBUKI_SMTP_FROM"] = f
+            
+            test_email = messagebox.askquestion("SMTP Test", f"Test e-postasi {u} adresine gonderilsin mi?")
+            if test_email == 'yes':
+                dialog.title("SMTP (E-posta) Ayarlari - Test ediliyor...")
+                success = self.service.notifier.send_email(
+                    to_email=u,
+                    subject="NeKiBuKi SMTP Test",
+                    message="NeKiBuKi uygulaması SMTP ayarları basariyla test edildi!"
+                )
+                dialog.title("SMTP (E-posta) Ayarlari")
+                if success:
+                    messagebox.showinfo("Basarili", f"Test e-postasi {u} adresine basariyla gonderildi.")
+                else:
+                    messagebox.showerror("Hata", "E-posta gonderimi basarisiz. Lutfen ayarlari kontrol edin.")
+        
+        ttk.Button(btn_frame, text="Kaydet", command=save_smtp, style="Primary.TButton").pack(side=LEFT, padx=5)
+        ttk.Button(btn_frame, text="Test Et", command=test_smtp).pack(side=LEFT, padx=5)
+        ttk.Button(btn_frame, text="Iptal", command=dialog.destroy).pack(side=RIGHT, padx=5)
