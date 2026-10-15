@@ -38,7 +38,12 @@ IN_STOCK_MARKERS = [
 ]
 
 # Match patterns with optional spaces around dot/comma (e.g. 65 , 95 TL)
-PRICE_PATTERN = re.compile(r"(\d{1,4}(?:\s*[.,]\s*\d{1,2})?)\s*(?:tl|₺)", re.IGNORECASE)
+# "12.499,00 TL", "1.250 TL", "65,95 TL", "65 , 95 ₺": binlik ayırıcılı biçim önce denenir,
+# yoksa "12.499,00" gibi fiyatlar soldaki gruplar atlanarak "499,00" diye okunurdu.
+PRICE_PATTERN = re.compile(
+    r"(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d{1,6}(?:\s*[.,]\s*\d{1,2})?)\s*(?:tl|₺)",
+    re.IGNORECASE,
+)
 
 def _http_get(url: str, timeout: int = 20) -> requests.Response:
     try:
@@ -250,6 +255,9 @@ class ProductScraper:
                 cleaned = cleaned.replace(",", "")
         elif "," in cleaned:
             cleaned = cleaned.replace(".", "").replace(",", ".")
+        elif re.fullmatch(r"\d{1,3}(?:\.\d{3})+", cleaned):
+            # Yalnızca noktalı ve 3'erli gruplar: Türkçe binlik ayırıcı ("1.250" = 1250)
+            cleaned = cleaned.replace(".", "")
 
         try:
             return float(cleaned)
@@ -598,7 +606,9 @@ class ProductScraper:
         if match:
             return self._parse_price(match.group(1))
 
-        generic_match = re.search(r"(\d{2,5}(?:[.,]\d{1,2})?)", text)
+        # Para birimi yoksa yalnızca ondalıklı ("65,95") sayıyı fiyat say: "stokta 200 adet",
+        # "2 x 140 g" gibi sayılar fiyat değildir. Sonrasında birim harfi geliyorsa ("65,5 g") alma.
+        generic_match = re.search(r"(?<![\d.,])(\d{1,6}[.,]\d{2})(?![\d.,]|\s*[A-Za-zÇĞİÖŞÜçğıöşü])", text)
         if generic_match:
             return self._parse_price(generic_match.group(1))
 
