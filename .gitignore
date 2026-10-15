@@ -11,3 +11,7 @@ env/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# SMTP şifresi burada düz metin saklanır — asla commit'lenmemeli
+data/config.json
+config.json
