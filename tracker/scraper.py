@@ -8,6 +8,14 @@ from urllib.parse import quote_plus, urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 
+from .matching import (  # noqa: F401
+    BRAND_TOKENS,
+    CATEGORY_HINT_TOKENS,
+    KNOWN_BRANDS,
+    build_query_tokens,
+    is_brand_mismatch,
+    normalize_general_query,
+)
 from .models import ScrapeResult
 
 DEFAULT_HEADERS = {
@@ -51,75 +59,6 @@ def _http_get(url: str, timeout: int = 20) -> requests.Response:
         return curl_requests.get(url, impersonate="chrome120", timeout=timeout)
     except ImportError:
         return requests.get(url, headers=DEFAULT_HEADERS, timeout=timeout)
-
-BRAND_TOKENS = {
-    "sek",
-    "icim",
-    "i\u00e7im",
-    "pinar",
-    "p\u0131nar",
-    "sutas",
-    "s\u00fcta\u015f",
-    "danone",
-    "mis",
-    "dost",
-    "altin",
-    "alt\u0131n",
-    "birsah",
-    "bir\u015fah",
-    "torku",
-    "yorukoglu",
-    "y\u00f6r\u00fcko\u011flu",
-    "tahsildaroglu",
-    "tahsildaro\u011flu",
-    "bahcivan",
-    "bah\u00e7\u0131van",
-    "ekici",
-    "kaanlar",
-    "kebir",
-    "muratbey",
-    "gundogdu",
-    "g\u00fcndo\u011fdu",
-}
-
-CATEGORY_HINT_TOKENS = {
-    "protein",
-    "proteinli",
-    "sut",
-    "s\u00fct",
-    "quark",
-    "yogurt",
-    "yo\u011furt",
-    "kefir",
-    "peynir",
-}
-
-KNOWN_BRANDS = [
-    "Sek",
-    "Icim",
-    "İçim",
-    "Pinar",
-    "Pınar",
-    "Sutas",
-    "Sütaş",
-    "Danone",
-    "Mis",
-    "Dost",
-    "Torku",
-    "Yorukoglu",
-    "Yörükoğlu",
-    "Tahsildaroglu",
-    "Tahsildaroğlu",
-    "Bahcivan",
-    "Bahçıvan",
-    "Ekici",
-    "Kaanlar",
-    "Kebir",
-    "Muratbey",
-    "Gundogdu",
-    "Gündoğdu",
-]
-
 
 def _is_product_url(url: str) -> bool:
     """Arama sayfası değil, ürün sayfası mı?"""
@@ -471,89 +410,13 @@ class ProductScraper:
         return offers
 
     def _build_query_tokens(self, query: str, general_mode: bool) -> list[str]:
-        tokens = [w.lower().strip() for w in query.split() if len(w.strip()) > 1]
-        if not general_mode:
-            return tokens
-
-        # Detect the brand candidate dynamically
-        detected_brands = set(b.lower() for b in KNOWN_BRANDS)
-        if tokens:
-            first_word = tokens[0]
-            NON_BRAND_FIRST_WORDS = {
-                "erkek", "kadin", "kadın", "cocuk", "çocuk", "bebek", "ucuz", "en", "buyuk", "büyük",
-                "kucuk", "küçük", "kirmizi", "kırmızı", "mavi", "siyah", "beyaz", "yesil", "yeşil",
-                "sari", "sarı", "kutu", "paket", "adet", "litre", "kilo", "gram", "saat", "telefon",
-                "bilgisayar", "tablet", "ayakkabi", "ayakkabı", "elbise", "pantolon", "gomlek", "gömlek",
-                "canta", "çanta", "defter", "kalem", "orjinal", "orijinal", "kaliteli", "yeni", "eski",
-                "sanal", "market", "hizli", "hızlı", "kargo", "bedava", "indirim", "firsat", "fırsat"
-            }
-            if first_word not in NON_BRAND_FIRST_WORDS:
-                detected_brands.add(first_word)
-
-        # In general mode, exclude brand tokens so we can match other brands of the same product
-        no_brand = [t for t in tokens if t not in BRAND_TOKENS and t not in detected_brands]
-        if no_brand:
-            return no_brand
-
-        return tokens
+        return build_query_tokens(query, general_mode)
 
     def _normalize_general_query(self, query: str) -> str:
-        tokens = [w.strip() for w in query.split() if len(w.strip()) > 1]
-        lowered = [t.lower() for t in tokens]
-
-        # Detect the brand candidate dynamically
-        detected_brands = set(b.lower() for b in KNOWN_BRANDS)
-        if lowered:
-            first_word = lowered[0]
-            NON_BRAND_FIRST_WORDS = {
-                "erkek", "kadin", "kadın", "cocuk", "çocuk", "bebek", "ucuz", "en", "buyuk", "büyük",
-                "kucuk", "küçük", "kirmizi", "kırmızı", "mavi", "siyah", "beyaz", "yesil", "yeşil",
-                "sari", "sarı", "kutu", "paket", "adet", "litre", "kilo", "gram", "saat", "telefon",
-                "bilgisayar", "tablet", "ayakkabi", "ayakkabı", "elbise", "pantolon", "gomlek", "gömlek",
-                "canta", "çanta", "defter", "kalem", "orjinal", "orijinal", "kaliteli", "yeni", "eski",
-                "sanal", "market", "hizli", "hızlı", "kargo", "bedava", "indirim", "firsat", "fırsat"
-            }
-            if first_word not in NON_BRAND_FIRST_WORDS:
-                detected_brands.add(first_word)
-
-        # Just filter out brand tokens so we can compare the same product across different brands
-        no_brand = [tokens[i] for i, t in enumerate(lowered) if t not in BRAND_TOKENS and t not in detected_brands]
-        if no_brand:
-            return " ".join(no_brand)
-
-        return query
+        return normalize_general_query(query)
 
     def _is_brand_mismatch(self, query: str, title_lower: str, general_mode: bool) -> bool:
-        if general_mode:
-            return False
-
-        query_lower = query.lower().strip()
-        query_words = [w for w in query_lower.split() if len(w) > 1]
-        if not query_words:
-            return False
-
-        query_brands = [b.lower() for b in KNOWN_BRANDS if b.lower() in query_lower]
-
-        first_word = query_words[0]
-        NON_BRAND_FIRST_WORDS = {
-            "erkek", "kadin", "kadın", "cocuk", "çocuk", "bebek", "ucuz", "en", "buyuk", "büyük",
-            "kucuk", "küçük", "kirmizi", "kırmızı", "mavi", "siyah", "beyaz", "yesil", "yeşil",
-            "sari", "sarı", "kutu", "paket", "adet", "litre", "kilo", "gram", "saat", "telefon",
-            "bilgisayar", "tablet", "ayakkabi", "ayakkabı", "elbise", "pantolon", "gomlek", "gömlek",
-            "canta", "çanta", "defter", "kalem", "orjinal", "orijinal", "kaliteli", "yeni", "eski",
-            "sanal", "market", "hizli", "hızlı", "kargo", "bedava", "indirim", "firsat", "fırsat"
-        }
-        if first_word not in NON_BRAND_FIRST_WORDS and first_word not in query_brands:
-            query_brands.append(first_word)
-
-        if not query_brands:
-            return False
-
-        has_matching_brand = any(qb in title_lower for qb in query_brands)
-        if not has_matching_brand:
-            return True
-
-        return False
+        return is_brand_mismatch(query, title_lower, general_mode)
 
     def _build_general_brand_link_offers(self, query: str) -> list[dict]:
         offers: list[dict] = []

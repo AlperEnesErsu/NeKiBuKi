@@ -81,3 +81,33 @@ def test_free_text_price_ignores_plain_quantities():
     assert scraper._extract_price_from_free_text("Sek Quark 140 g") is None
     # Para birimi yazmasa da ondalıklı fiyat yakalanır
     assert scraper._extract_price_from_free_text("Sek Quark 29,90") == 29.9
+
+
+def test_build_query_tokens_general_mode_drops_the_brand():
+    scraper = ProductScraper()
+    # Non-general mode keeps every token (lower-cased, 1-char words dropped).
+    assert scraper._build_query_tokens("Sek Quark 140 g x", False) == ["sek", "quark", "140"]
+    # General mode removes known and first-word brands so other brands match.
+    assert scraper._build_query_tokens("Sek Quark Sade", True) == ["quark", "sade"]
+    assert scraper._build_query_tokens("Casio F-91W Saat", True) == ["f-91w", "saat"]
+    # A leading generic word is not a brand and stays.
+    assert scraper._build_query_tokens("erkek kol saati", True) == ["erkek", "kol", "saati"]
+    # Nothing left after removing the brand -> fall back to all tokens.
+    assert scraper._build_query_tokens("sek", True) == ["sek"]
+
+
+def test_normalize_general_query_keeps_original_casing_without_the_brand():
+    scraper = ProductScraper()
+    assert scraper._normalize_general_query("Sek Quark Sade") == "Quark Sade"
+    assert scraper._normalize_general_query("Casio F-91W Saat") == "F-91W Saat"
+    assert scraper._normalize_general_query("erkek kol saati") == "erkek kol saati"
+    assert scraper._normalize_general_query("Sek") == "Sek"
+
+
+def test_is_brand_mismatch_requires_the_query_brand_in_the_title():
+    scraper = ProductScraper()
+    assert scraper._is_brand_mismatch("Sek Quark", "icim quark sade", False) is True
+    assert scraper._is_brand_mismatch("Sek Quark", "sek quark sade", False) is False
+    assert scraper._is_brand_mismatch("Sek Quark", "icim quark sade", True) is False  # general mode
+    assert scraper._is_brand_mismatch("erkek kol saati", "casio kol saati", False) is False
+    assert scraper._is_brand_mismatch("", "anything", False) is False
