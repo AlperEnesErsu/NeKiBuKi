@@ -5,7 +5,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from tkinter import BOTH, END, LEFT, RIGHT, TOP, VERTICAL, W, X, Y, ttk
+from tkinter import BOTH, END, LEFT, RIGHT, VERTICAL, W, X, Y, ttk
 import tkinter as tk
 from tkinter import messagebox
 from urllib.parse import unquote, urlparse
@@ -18,8 +18,11 @@ import schedule
 
 from .models import Product
 from .notifier import Notifier
+from .presenters import describe_check, parse_product_form, product_row
 from .scraper import ProductScraper
 from .service import TrackerService
+from .smtp_config import config_path_for, export_smtp_env, load_smtp_config
+from .smtp_dialog import open_smtp_settings
 from .storage import JsonStorage
 
 
@@ -33,25 +36,8 @@ class App(tk.Tk):
         self.storage = JsonStorage(data_file)
         self.service = TrackerService(self.storage, ProductScraper(), Notifier())
 
-        # Load SMTP settings from config.json
-        config_path = data_file.parent / "config.json"
-        if config_path.exists():
-            try:
-                import json
-                import os
-                config = json.loads(config_path.read_text(encoding="utf-8"))
-                if config.get("smtp_host"):
-                    os.environ["NEKIBUKI_SMTP_HOST"] = config["smtp_host"]
-                if config.get("smtp_port"):
-                    os.environ["NEKIBUKI_SMTP_PORT"] = str(config["smtp_port"])
-                if config.get("smtp_user"):
-                    os.environ["NEKIBUKI_SMTP_USER"] = config["smtp_user"]
-                if config.get("smtp_pass"):
-                    os.environ["NEKIBUKI_SMTP_PASS"] = config["smtp_pass"]
-                if config.get("smtp_from"):
-                    os.environ["NEKIBUKI_SMTP_FROM"] = config["smtp_from"]
-            except Exception:
-                pass
+        # SMTP ayarları config.json'dan ortam değişkenlerine (Notifier oradan okur)
+        export_smtp_env(load_smtp_config(config_path_for(data_file)))
 
         self.scheduler = schedule.Scheduler()
         self.scheduler_stop = threading.Event()
@@ -279,17 +265,7 @@ class App(tk.Tk):
             self._insert_or_update_tree(product)
 
     def _insert_or_update_tree(self, product: Product) -> None:
-        stock_label = "?" if product.last_stock_in is None else ("Var" if product.last_stock_in else "Yok")
-        price_label = "-" if product.last_price is None else f"{product.last_price:.2f}"
-        checked_label = product.last_checked_at.replace("T", " ")[:16] if product.last_checked_at else "-"
-
-        values = (
-            product.name,
-            f"{product.target_price:.2f}",
-            price_label,
-            stock_label,
-            checked_label,
-        )
+        values = product_row(product)
 
         if self.tree.exists(product.product_id):
             self.tree.item(product.product_id, values=values)
@@ -297,22 +273,11 @@ class App(tk.Tk):
             self.tree.insert("", END, iid=product.product_id, values=values)
 
     def _save_product(self) -> None:
-        name = self.name_var.get().strip()
-        url = self.url_var.get().strip()
-
-        if not name or not url:
-            messagebox.showerror("Hata", "Urun adi ve URL zorunludur.")
-            return
-
-        try:
-            target_price = float(self.target_var.get().strip())
-            check_interval = float(self.interval_var.get().strip())
-        except ValueError:
-            messagebox.showerror("Hata", "Hedef fiyat ve aralik sayi olmali.")
-            return
-
-        if check_interval <= 0:
-            messagebox.showerror("Hata", "Kontrol araligi sifirdan buyuk olmali.")
+        form = parse_product_form(
+            self.name_var.get(), self.url_var.get(), self.target_var.get(), self.interval_var.get()
+        )
+        if isinstance(form, str):
+            messagebox.showerror("Hata", form)
             return
 
         product_id = self.selected_product_id or str(uuid.uuid4())
@@ -320,10 +285,10 @@ class App(tk.Tk):
 
         product = Product(
             product_id=product_id,
-            name=name,
-            url=url,
-            target_price=target_price,
-            check_interval_hours=check_interval,
+            name=form.name,
+            url=form.url,
+            target_price=form.target_price,
+            check_interval_hours=form.check_interval_hours,
             notify_desktop=self.desktop_var.get(),
             notify_email=self.email_notify_var.get(),
             email_to=self.email_to_var.get().strip(),
@@ -399,37 +364,9 @@ class App(tk.Tk):
             return None
 
     def _set_check_alert(self, result, target_price: float | None) -> None:
-        stock_text = "Belirsiz"
-        if result.stock_in is True:
-            stock_text = "Var"
-        elif result.stock_in is False:
-            stock_text = "Yok"
-
-        if result.price is None:
-            price_text = "Fiyat bulunamadi"
-            target_text = "Hedef durumu: Belirsiz"
-            below_target = False
-        else:
-            price_text = f"Fiyat: {result.price:.2f} TL"
-            if target_price is None or target_price <= 0:
-                target_text = "Hedef durumu: Hedef fiyat girilmedi"
-                below_target = False
-            else:
-                below_target = result.price <= target_price
-                target_text = (
-                    f"Hedef alti: {'Evet' if below_target else 'Hayir'} "
-                    f"(Hedef {target_price:.2f} TL)"
-                )
-
-        message = f"Stok: {stock_text} | {price_text} | {target_text}"
+        message, color = describe_check(result, target_price)
         self.check_alert_var.set(message)
-
-        if result.stock_in is True and below_target:
-            self.check_alert_label.configure(fg="#34d399")
-        elif result.stock_in is True:
-            self.check_alert_label.configure(fg="#fbbf24")
-        else:
-            self.check_alert_label.configure(fg="#f87171")
+        self.check_alert_label.configure(fg=color)
 
     def _check_all(self) -> None:
         all_results = self.service.check_all_products()
@@ -647,120 +584,4 @@ class App(tk.Tk):
         self.destroy()
 
     def _open_smtp_settings(self) -> None:
-        import os
-        import json
-        
-        dialog = tk.Toplevel(self)
-        dialog.title("SMTP (E-posta) Ayarlari")
-        dialog.geometry("450x330")
-        dialog.configure(bg="#0f172a")
-        dialog.transient(self)
-        dialog.grab_set()
-        dialog.resizable(False, False)
-        
-        config_path = self.storage.file_path.parent / "config.json"
-        config = {}
-        if config_path.exists():
-            try:
-                config = json.loads(config_path.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        
-        host_var = tk.StringVar(value=config.get("smtp_host", os.getenv("NEKIBUKI_SMTP_HOST", "")))
-        port_var = tk.StringVar(value=config.get("smtp_port", os.getenv("NEKIBUKI_SMTP_PORT", "587")))
-        user_var = tk.StringVar(value=config.get("smtp_user", os.getenv("NEKIBUKI_SMTP_USER", "")))
-        pass_var = tk.StringVar(value=config.get("smtp_pass", os.getenv("NEKIBUKI_SMTP_PASS", "")))
-        from_var = tk.StringVar(value=config.get("smtp_from", os.getenv("NEKIBUKI_SMTP_FROM", "")))
-        
-        frame = ttk.Frame(dialog, padding=15, style="App.TFrame")
-        frame.pack(fill=BOTH, expand=True)
-        
-        ttk.Label(frame, text="SMTP Sunucu (Host):").grid(row=0, column=0, sticky=W, padx=5, pady=5)
-        ttk.Entry(frame, textvariable=host_var, width=25).grid(row=0, column=1, sticky=W, padx=5, pady=5)
-        
-        ttk.Label(frame, text="SMTP Port:").grid(row=1, column=0, sticky=W, padx=5, pady=5)
-        ttk.Entry(frame, textvariable=port_var, width=10).grid(row=1, column=1, sticky=W, padx=5, pady=5)
-        
-        ttk.Label(frame, text="SMTP Kullanici (E-posta):").grid(row=2, column=0, sticky=W, padx=5, pady=5)
-        ttk.Entry(frame, textvariable=user_var, width=25).grid(row=2, column=1, sticky=W, padx=5, pady=5)
-        
-        ttk.Label(frame, text="SMTP Sifre / Uygulama Sifresi:").grid(row=3, column=0, sticky=W, padx=5, pady=5)
-        ttk.Entry(frame, textvariable=pass_var, show="*", width=25).grid(row=3, column=1, sticky=W, padx=5, pady=5)
-        
-        ttk.Label(frame, text="Gonderen E-posta (Opsiyonel):").grid(row=4, column=0, sticky=W, padx=5, pady=5)
-        ttk.Entry(frame, textvariable=from_var, width=25).grid(row=4, column=1, sticky=W, padx=5, pady=5)
-        
-        btn_frame = ttk.Frame(frame, style="App.TFrame")
-        btn_frame.grid(row=5, column=0, columnspan=2, pady=15, sticky="ew")
-        
-        def save_smtp():
-            h = host_var.get().strip()
-            p = port_var.get().strip()
-            u = user_var.get().strip()
-            pwd = pass_var.get().strip()
-            f = from_var.get().strip()
-            
-            if not h or not u or not pwd:
-                messagebox.showerror("Hata", "Sunucu, kullanici ve sifre alanlari zorunludur.")
-                return
-                
-            config_data = {
-                "smtp_host": h,
-                "smtp_port": p,
-                "smtp_user": u,
-                "smtp_pass": pwd,
-                "smtp_from": f
-            }
-            
-            try:
-                config_path.write_text(json.dumps(config_data, indent=2, ensure_ascii=False), encoding="utf-8")
-                
-                os.environ["NEKIBUKI_SMTP_HOST"] = h
-                os.environ["NEKIBUKI_SMTP_PORT"] = p
-                os.environ["NEKIBUKI_SMTP_USER"] = u
-                os.environ["NEKIBUKI_SMTP_PASS"] = pwd
-                if f:
-                    os.environ["NEKIBUKI_SMTP_FROM"] = f
-                else:
-                    os.environ.pop("NEKIBUKI_SMTP_FROM", None)
-                    
-                messagebox.showinfo("Basarili", "SMTP ayarları kaydedildi.")
-                dialog.destroy()
-            except Exception as e:
-                messagebox.showerror("Hata", f"Ayarlar kaydedilemedi: {e}")
-                
-        def test_smtp():
-            h = host_var.get().strip()
-            p = port_var.get().strip()
-            u = user_var.get().strip()
-            pwd = pass_var.get().strip()
-            f = from_var.get().strip()
-            
-            if not h or not u or not pwd:
-                messagebox.showerror("Hata", "Test icin sunucu, kullanici ve sifre gereklidir.")
-                return
-                
-            os.environ["NEKIBUKI_SMTP_HOST"] = h
-            os.environ["NEKIBUKI_SMTP_PORT"] = p
-            os.environ["NEKIBUKI_SMTP_USER"] = u
-            os.environ["NEKIBUKI_SMTP_PASS"] = pwd
-            if f:
-                os.environ["NEKIBUKI_SMTP_FROM"] = f
-            
-            test_email = messagebox.askquestion("SMTP Test", f"Test e-postasi {u} adresine gonderilsin mi?")
-            if test_email == 'yes':
-                dialog.title("SMTP (E-posta) Ayarlari - Test ediliyor...")
-                success = self.service.notifier.send_email(
-                    to_email=u,
-                    subject="NeKiBuKi SMTP Test",
-                    message="NeKiBuKi uygulaması SMTP ayarları basariyla test edildi!"
-                )
-                dialog.title("SMTP (E-posta) Ayarlari")
-                if success:
-                    messagebox.showinfo("Basarili", f"Test e-postasi {u} adresine basariyla gonderildi.")
-                else:
-                    messagebox.showerror("Hata", "E-posta gonderimi basarisiz. Lutfen ayarlari kontrol edin.")
-        
-        ttk.Button(btn_frame, text="Kaydet", command=save_smtp, style="Primary.TButton").pack(side=LEFT, padx=5)
-        ttk.Button(btn_frame, text="Test Et", command=test_smtp).pack(side=LEFT, padx=5)
-        ttk.Button(btn_frame, text="Iptal", command=dialog.destroy).pack(side=RIGHT, padx=5)
+        open_smtp_settings(self, config_path_for(self.storage.file_path), self.service.notifier)
