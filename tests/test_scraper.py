@@ -56,3 +56,28 @@ def test_dynamic_brand_matching():
     # 4. Common words (should not trigger brand mismatch)
     assert scraper._is_brand_mismatch("Erkek Kol Saati", "casio kol saati", False) is False
 
+
+
+def test_price_pattern_keeps_thousands_groups():
+    scraper = ProductScraper()
+    assert scraper._extract_price_from_free_text("Fiyat 12.499,00 TL sepete ekle") == 12499.0
+    assert scraper._extract_price_from_free_text("1.250 TL") == 1250.0
+    assert scraper._extract_price_from_free_text("65,95 ₺") == 65.95
+    assert scraper._extract_price_from_free_text("65 , 95 TL") == 65.95
+
+
+def test_parse_price_treats_dotted_groups_as_thousands():
+    scraper = ProductScraper()
+    assert scraper._parse_price("1.250") == 1250.0
+    assert scraper._parse_price("12.499") == 12499.0
+    # İki ondalıklı nokta hâlâ ondalık
+    assert scraper._parse_price("65.95") == 65.95
+
+
+def test_free_text_price_ignores_plain_quantities():
+    scraper = ProductScraper()
+    assert scraper._extract_price_from_free_text("stokta 200 adet") is None
+    assert scraper._extract_price_from_free_text("2 x 140 g quark") is None
+    assert scraper._extract_price_from_free_text("Sek Quark 140 g") is None
+    # Para birimi yazmasa da ondalıklı fiyat yakalanır
+    assert scraper._extract_price_from_free_text("Sek Quark 29,90") == 29.9
