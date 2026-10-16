@@ -53,12 +53,38 @@ PRICE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-def _http_get(url: str, timeout: int = 20) -> requests.Response:
+# Migros sanalmarket bir SPA: /arama sayfası ürünsüz bir HTML kabuğu döner (ürünler
+# tarayıcıda bu uç noktadan çekilir). Fiyatlar kuruş cinsindendir (6595 = 65,95 TL).
+MIGROS_SEARCH_API = "https://www.migros.com.tr/rest/search/screens/products?q={}"
+
+
+def _http_get(url: str, timeout: int = 20, headers: Optional[dict] = None) -> requests.Response:
     try:
         from curl_cffi import requests as curl_requests
-        return curl_requests.get(url, impersonate="chrome120", timeout=timeout)
+        return curl_requests.get(url, impersonate="chrome120", timeout=timeout, headers=headers)
     except ImportError:
-        return requests.get(url, headers=DEFAULT_HEADERS, timeout=timeout)
+        return requests.get(url, headers={**DEFAULT_HEADERS, **(headers or {})}, timeout=timeout)
+
+
+def parse_migros_search(payload: dict) -> list[dict]:
+    """Migros arama yanıtındaki satıştaki ürünler: başlık, TL fiyat ve ürün URL'si."""
+    data = payload.get("data") or {}
+    infos = (data.get("searchInfo") or {}).get("storeProductInfos") or []
+    products: list[dict] = []
+    for info in infos:
+        name = (info.get("name") or "").strip()
+        slug = (info.get("prettyName") or "").strip()
+        kurus = info.get("shownPrice")
+        if not name or not slug or not isinstance(kurus, (int, float)) or kurus <= 0:
+            continue
+        if info.get("status") not in (None, "IN_SALE"):
+            continue  # tükenmiş / satış dışı ürün alternatif teklif değildir
+        products.append({
+            "title": name,
+            "price": round(kurus / 100, 2),
+            "url": f"https://www.migros.com.tr/{slug}",
+        })
+    return products
 
 def _is_product_url(url: str) -> bool:
     """Arama sayfası değil, ürün sayfası mı?"""
@@ -74,9 +100,9 @@ def _is_product_url(url: str) -> bool:
     # Akakce: /urun/ veya /fiyati,
     if "akakce.com" in domain:
         return "/urun/" in path or "/fiyati," in path or re.search(r"/[a-z0-9-]+-\d+", path) is not None
-    # Migros: genelde /urun/ ile gider
+    # Migros: /sek-quark-sade-140-g-p-9ed4a5 (onaltılık kimlik); eski /urun/ biçimi de kabul
     if "migros.com.tr" in domain:
-        return "/urun/" in path
+        return bool(re.search(r"-p-[0-9a-f]+/?$", path)) or "/urun/" in path
     # A101: /p/ veya /urun/ veya /market/ veya /kapida/urun/
     if "a101.com.tr" in domain:
         return "/p/" in path or "/urun/" in path or "/market/" in path or "/kapida/urun/" in path or ("/kapida/" in path and "arama" not in path)
@@ -240,10 +266,14 @@ class ProductScraper:
                 "link_only": False,
             }
             try:
-                soup, status_code, fetch_error = self._fetch_soup(url)
-                site_debug["status_code"] = status_code
-                site_debug["fetch_error"] = fetch_error
                 site_offers: list[dict] = []
+                if site_name == "Migros":
+                    site_offers = self._collect_migros_offers(effective_query, site_debug, general_mode)
+                    soup = None
+                else:
+                    soup, status_code, fetch_error = self._fetch_soup(url)
+                    site_debug["status_code"] = status_code
+                    site_debug["fetch_error"] = fetch_error
                 if soup:
                     site_offers = self._collect_generic_offers(
                         site_name,
@@ -407,6 +437,38 @@ class ProductScraper:
             except Exception:
                 continue
 
+        return offers
+
+    def _collect_migros_offers(
+        self, query: str, debug: dict[str, object], general_mode: bool = False
+    ) -> list[dict]:
+        try:
+            response = _http_get(
+                MIGROS_SEARCH_API.format(quote_plus(query)), timeout=20, headers={"Accept": "application/json"}
+            )
+            debug["status_code"] = response.status_code
+            response.raise_for_status()
+            products = parse_migros_search(response.json())
+        except Exception as exc:
+            debug["fetch_error"] = str(exc)
+            return []
+
+        query_tokens = self._build_query_tokens(query, general_mode)
+        ratio = 0.4 if general_mode else 0.6
+        min_match = max(1, math.ceil(len(query_tokens) * ratio)) if query_tokens else 1
+        offers: list[dict] = []
+        for product in products:
+            debug["links_scanned"] = int(debug.get("links_scanned", 0)) + 1
+            title_lower = product["title"].lower()
+            if self._is_brand_mismatch(query, title_lower, general_mode) or (
+                query_tokens and sum(1 for t in query_tokens if t in title_lower) < min_match
+            ):
+                debug["token_filtered"] = int(debug.get("token_filtered", 0)) + 1
+                continue
+            offers.append({"site": "Migros", **product, "title": product["title"][:120]})
+            debug["accepted"] = int(debug.get("accepted", 0)) + 1
+            if len(offers) >= 15:
+                break
         return offers
 
     def _build_query_tokens(self, query: str, general_mode: bool) -> list[str]:
