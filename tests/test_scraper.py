@@ -111,3 +111,61 @@ def test_is_brand_mismatch_requires_the_query_brand_in_the_title():
     assert scraper._is_brand_mismatch("Sek Quark", "icim quark sade", True) is False  # general mode
     assert scraper._is_brand_mismatch("erkek kol saati", "casio kol saati", False) is False
     assert scraper._is_brand_mismatch("", "anything", False) is False
+
+
+def test_is_product_url_real_migros_slug():
+    # Gerçek Migros ürün adresi /urun/ içermez, onaltılık kimlikle biter
+    assert _is_product_url("https://www.migros.com.tr/sek-quark-sade-140-g-p-9ed4a5") is True
+    assert _is_product_url("https://www.migros.com.tr/peynir-c-6d") is False
+
+
+MIGROS_PAYLOAD = {
+    "successful": True,
+    "data": {"searchInfo": {"storeProductInfos": [
+        {"name": "Sek Quark Sade 140 G", "prettyName": "sek-quark-sade-140-g-p-9ed4a5", "shownPrice": 6595, "status": "IN_SALE"},
+        {"name": "Sek Quark Çilek 140 G", "prettyName": "sek-quark-cilek-140-g-p-9ed4a6", "shownPrice": 6595, "status": "OUT_OF_STOCK"},
+        {"name": "Pınar Labne 200 G", "prettyName": "pinar-labne-200-g-p-1a2b", "shownPrice": 8990, "status": "IN_SALE"},
+        {"name": "Fiyatsız", "prettyName": "x-p-1", "shownPrice": None},
+    ]}},
+}
+
+
+def test_parse_migros_search_converts_kurus_and_skips_unavailable():
+    from tracker.scraper import parse_migros_search
+
+    products = parse_migros_search(MIGROS_PAYLOAD)
+    assert products == [
+        {"title": "Sek Quark Sade 140 G", "price": 65.95, "url": "https://www.migros.com.tr/sek-quark-sade-140-g-p-9ed4a5"},
+        {"title": "Pınar Labne 200 G", "price": 89.9, "url": "https://www.migros.com.tr/pinar-labne-200-g-p-1a2b"},
+    ]
+    assert parse_migros_search({}) == []
+
+
+class _FakeResponse:
+    status_code = 200
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return MIGROS_PAYLOAD
+
+
+def test_migros_offers_come_from_the_search_api(monkeypatch):
+    import tracker.scraper as scraper
+
+    calls = []
+
+    def fake_get(url, timeout=20, headers=None):
+        calls.append((url, headers))
+        return _FakeResponse()
+
+    monkeypatch.setattr(scraper, "_http_get", fake_get)
+    debug: dict = {}
+    offers = ProductScraper()._collect_migros_offers("sek quark sade", debug)
+
+    assert calls[0][0].startswith("https://www.migros.com.tr/rest/search/screens/products?q=sek+quark+sade")
+    assert calls[0][1] == {"Accept": "application/json"}
+    assert [o["title"] for o in offers] == ["Sek Quark Sade 140 G"]   # Pınar labne kelime filtresine takılır
+    assert offers[0]["site"] == "Migros" and offers[0]["price"] == 65.95
+    assert debug["accepted"] == 1 and debug["status_code"] == 200
